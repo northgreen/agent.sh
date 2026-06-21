@@ -518,6 +518,7 @@ Use these tools when you need to interact with the system or get information.
 Think step by step — your reasoning will be visible to the user.
 When you have enough information, provide the final answer directly.
 '
+  local others="Now date is $(date),Current path is $(pwd)"
 
     # 加载 AGENTS.md
     local agents_content
@@ -525,6 +526,7 @@ When you have enough information, provide the final answer directly.
     if [ -n "$agents_content" ]; then
         prompt="$prompt"$'\n\n'"<project_instructions>"
         prompt="$prompt"$'\n'"${agents_content}"
+        prompt="$prompt"$'\n'"${others}"
         prompt="$prompt"$'\n'"</project_instructions>"
     fi
 
