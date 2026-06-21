@@ -768,6 +768,15 @@ run_agent() {
         finish_reason=$(echo "$response" | jq -r '.choices[0].finish_reason')
         local content
         content=$(echo "$assistant_msg" | jq -r '.content // empty')
+        local reasoning
+        reasoning=$(echo "$assistant_msg" | jq -r '.reasoning_content // empty')
+
+        # 显示推理过程（DeepSeek 风格）
+        if [ -n "$reasoning" ]; then
+            center_line "Thinking"
+            echo "$reasoning"
+            center_line "Response"
+        fi
 
         # 显示模型思考过程（用 glow 格式化 markdown）
         if [ -n "$content" ]; then
