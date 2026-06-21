@@ -60,6 +60,35 @@ BASH_WHITELIST=(
 MAX_LINES=200
 MAX_BYTES=10240  # 10KB
 
+########分割线
+center_line() {
+    local title=" ${1:-} "                     # 标题两侧加空格，视觉更舒展
+    local char="${2:-=}"                   # 默认填充符为 "="
+    local cols=$(tput cols)                # 获取当前终端宽度
+    
+    # 关键：用 wc -m 统计字符数（正确处理中文/emoji）
+    local title_len=$(printf "%s" "$title" | wc -m)
+    
+    # 若标题过长，直接打印并换行
+    if [ $title_len -ge $cols ]; then
+        echo "$title"
+        return
+    fi
+    
+    # 计算左右填充长度（处理奇数宽度，右侧多补1个）
+    local left_len=$(( (cols - title_len) / 2 ))
+    local right_len=$(( cols - title_len - left_len ))
+    
+    # 生成填充字符串（将空格替换为指定字符）
+    printf -v left "%*s" "$left_len" ""
+    printf -v right "%*s" "$right_len" ""
+    left="${left// /$char}"
+    right="${right// /$char}"
+    
+    # 合并输出
+    printf "%s%s%s\n" "$left" "$title" "$right"
+}
+
 # ====================== 通用截断函数 ======================
 
 # 从头截取：从 content 开头截取最多 max_lines 行 / max_bytes 字节（先到为准）
@@ -181,6 +210,20 @@ truncate_tail() {
     output="$output"$'\n'"% [Showing last ${out_count} of ${total_lines} lines. Full output: ${full_output_file}]"
 
     echo "$output"
+}
+
+# ====================== Markdown 渲染 ======================
+# 如果安装了 glow，用 glow 渲染 markdown；否则原样输出
+render_md() {
+    local text="$1"
+    if [ -z "$text" ]; then
+        return
+    fi
+    if command -v glow &>/dev/null; then
+        echo "$text" | glow -
+    else
+        echo "$text"
+    fi
 }
 
 # ====================== 工具函数 ======================
@@ -673,7 +716,7 @@ run_agent() {
 
     while [ $iter -lt $max_iterations ]; do
         iter=$((iter + 1))
-        echo "--- Turn $iter ---"
+        center_line "Turn $iter"
 
         # 调用 API（带 tools 参数）
         # 通过临时文件传递 messages（避免 ARG_MAX 限制）
@@ -726,9 +769,10 @@ run_agent() {
         local content
         content=$(echo "$assistant_msg" | jq -r '.content // empty')
 
-        # 显示模型思考过程
+        # 显示模型思考过程（用 glow 格式化 markdown）
         if [ -n "$content" ]; then
-            echo "🤖 $content"
+            echo "🤖"
+            render_md "$content"
         fi
 
         # 检查是否结束（无工具调用）
@@ -786,12 +830,18 @@ if [ -z "${API_KEY:-}" ]; then
     echo
 fi
 
-if command -v fzf &>/dev/null; then
-    echo "Fetching available models..."
-    MODEL=$(curl -s "$API_BASE/models" -H "Authorization: Bearer $API_KEY" | jq -r '.data[].id' | fzf --prompt="Select a model: ")
-else
-    read -p "Enter model ID (e.g., gpt-3.5-turbo): " MODEL
+
+if [ -z "${MODEL:-}" ]; then
+  if command -v fzf &>/dev/null; then
+      echo "Fetching available models..."
+      MODEL=$(curl -s "$API_BASE/models" -H "Authorization: Bearer $API_KEY" | jq -r '.data[].id' | fzf --prompt="Select a model: ")
+  else
+      read -p "Enter model ID (e.g., gpt-3.5-turbo): " MODEL
+  fi
 fi
+
+
+
 if [ -z "${MODEL:-}" ]; then
     echo "No model selected. Exiting."
     exit 1
@@ -811,9 +861,9 @@ while true; do
     # 斜杠命令
     if [[ "$task" == /* ]]; then
         handle_slash_command "$task"
-        echo "-----------------------"
+        center_line
         continue
     fi
     run_agent "$task"
-    echo "-----------------------"
+    center_line
 done
