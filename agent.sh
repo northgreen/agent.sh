@@ -310,11 +310,11 @@ _write_edit() {
 
     # 读取文件
     local content
-    content=$(cat "$path") || { echo "Error: cannot read $path"; return 1; }
+    content=$(cat "$path") || { echo "Error: cannot read $path. Check the path and read the file first to verify it exists."; return 1; }
 
     local edit_count
     edit_count=$(echo "$edits_json" | jq 'length')
-    [ "$edit_count" -eq 0 ] && { echo "Error: edits array is empty"; return 1; }
+    [ "$edit_count" -eq 0 ] && { echo "Error: edits array is empty. Provide at least one {oldText, newText} edit."; return 1; }
 
     # 从后往前应用（保持位置不变）
     local i
@@ -323,7 +323,7 @@ _write_edit() {
         oldText=$(echo "$edits_json" | jq -r ".[$i].oldText // empty")
         newText=$(echo "$edits_json" | jq -r ".[$i].newText // empty")
 
-        [ -z "$oldText" ] && { echo "Error: edit $i has empty oldText"; return 1; }
+        [ -z "$oldText" ] && { echo "Error: edit $i has empty oldText. oldText must contain the exact text to replace."; return 1; }
 
         # 用 bash 字符串操作计算出现次数（纯字符级匹配）
         local modified="${content//"$oldText"/}"
@@ -333,9 +333,11 @@ _write_edit() {
         local count=$(( (clen - mlen) / olen ))
 
         if [ "$count" -eq 0 ]; then
-            echo "Error: edit $i: oldText not found in file"; return 1
+            echo "Error: edit $i: oldText not found in file. Read the file first to get the exact content, then try again with the correct oldText. Watch for whitespace differences (trailing spaces, indentation)."
+            return 1
         elif [ "$count" -gt 1 ]; then
-            echo "Error: edit $i: oldText found $count times (must be unique)"; return 1
+            echo "Error: edit $i: oldText found $count times (must be unique). Include more surrounding context (nearby lines) to make oldText uniquely match the intended location. If the change affects multiple occurrences, consider using patch mode."
+            return 1
         fi
 
         # 替换第一个匹配
@@ -401,6 +403,7 @@ _apply_patch() {
         if ! dry_run_output=$(patch --dry-run --input="$tmpfile" --forward "$path" 2>&1); then
             echo "Patch dry-run failed for ${path}:"
             echo "$dry_run_output"
+            echo "Tip: Use mode='edit' for targeted text replacement, or generate the diff with 'diff -u original_file modified_file' and ensure context lines match exactly."
             return 1
         fi
     fi
@@ -1109,7 +1112,7 @@ execute_tool_call() {
             local path=$(echo "$tool_args" | jq -r '.path // empty')
             local mode=$(echo "$tool_args" | jq -r '.mode // "edit"')
             if [ -z "$path" ]; then
-                echo "Error: missing required argument 'path'"
+                echo "Error: 'path' is required. Provide the file path to edit."
                 return
             fi
             case "$mode" in
@@ -1117,7 +1120,7 @@ execute_tool_call() {
                     local edits
                     edits=$(echo "$tool_args" | jq -c '.edits // []')
                     [ "$edits" = "[]" ] || [ -z "$edits" ] && {
-                        echo "Error: missing required argument 'edits' for mode=edit"
+                        echo "Error: 'edits' is required for mode=edit. Provide an array of {oldText, newText} replacements."
                         return
                     }
                     result=$(_write_edit "$path" "$edits")
@@ -1125,7 +1128,7 @@ execute_tool_call() {
                 patch)
                     local content=$(echo "$tool_args" | jq -r '.content // empty')
                     [ -z "$content" ] && {
-                        echo "Error: missing required argument 'content' for mode=patch"
+                        echo "Error: 'content' is required for mode=patch. Provide a unified diff."
                         return
                     }
                     result=$(_apply_patch "$path" "$content")
@@ -1133,7 +1136,7 @@ execute_tool_call() {
                 write)
                     local content=$(echo "$tool_args" | jq -r '.content // empty')
                     [ -z "$content" ] && {
-                        echo "Error: missing required argument 'content' for mode=write"
+                        echo "Error: 'content' is required for mode=write. Provide the full file content."
                         return
                     }
                     result=$(write_file "$path" "$content")
