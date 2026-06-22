@@ -577,7 +577,7 @@ TOOLS_JSON='[
     "type": "function",
     "function": {
       "name": "write",
-      "description": "Write or edit a file. mode='edit' (default): make precise edits using oldText/newText pairs. mode='patch': apply a unified diff. mode='write': overwrite entire file. Has permission checks: system paths denied, temp paths auto-allowed, others require confirmation. Returns operation result.",
+      "description": "Edit or patch a file. mode='edit' (default): replace exact text blocks using oldText/newText pairs. Each edits[].oldText must match a unique, non-overlapping region of the original file. If two changes affect nearby lines, merge them into one edit. mode='patch': apply a unified diff for large structural changes. Has permission checks: system paths denied, temp paths auto-allowed, others require confirmation.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -601,17 +601,17 @@ TOOLS_JSON='[
               },
               "required": ["oldText", "newText"]
             },
-            "description": "Array of oldText/newText replacements (required for mode='edit')"
+            "description": "Array of oldText/newText replacements. Each oldText must be unique in the file. Merge nearby changes into one edit instead of overlapping edits."
           },
           "content": {
             "type": "string",
-            "description": "Unified diff (mode='patch') or full file content (mode='write')"
+            "description": "Unified diff content (required for mode='patch')"
           },
           "mode": {
             "type": "string",
-            "enum": ["edit", "patch", "write"],
+            "enum": ["edit", "patch"],
             "default": "edit",
-            "description": "Write mode: 'edit' for precise oldText→newText replacement (default), 'patch' for unified diff, 'write' for full overwrite"
+            "description": "Edit mode (default): replace exact text blocks via edits[].oldText→newText. Patch mode: apply a unified diff."
           }
         },
         "required": ["path"]
@@ -718,7 +718,7 @@ build_system_prompt() {
     local prompt='You are an AI assistant that can use tools to accomplish tasks.
 You have access to the following tools:
 - read: Read content of a file (supports offset/limit for large files)
-- write: Write or edit a file (default: edit/oldText→newText replacement; use mode="patch" for unified diff, mode="write" for full overwrite)
+- write: Edit or patch a file. Use mode="edit" (default) for precise oldText→newText replacement. Use mode="patch" to apply a unified diff. Each edits[].oldText must match exactly once in the file. For multiple changes in one file, use one write call with multiple entries in edits[] instead of separate calls.
 - bash: Execute a shell command (has permission checks, timeout optional, output truncated)
 - ask: Ask the user a question
 - load_skill: Load a skill to gain specialized instructions and workflows (provide skill name). Returns the full skill content and its file path.
@@ -728,8 +728,11 @@ Think step by step — your reasoning will be visible to the user.
 When you have enough information, provide the final answer directly.
 
 ## Tool Philosophy
-- In write tool , edit mode is the default and preferred for surgical changes. Use patch mode for larger diffs, write mode for new files or complete rewrites.
-- Don’t make decisions for the user, ask the user.
+- Use **edit** mode (default) for precise targeted changes. Keep oldText as short as possible while still unique in the file.
+- When changing multiple separate locations, use one write call with multiple entries in edits[] rather than separate calls.
+- Each edits[].oldText is matched against the **original** file, not after earlier edits. Do not emit overlapping edits — merge nearby changes into one edit instead.
+- Use **patch** mode for large structural changes (e.g., adding new functions, reordering blocks) where a unified diff is more convenient than multiple edits.
+- Do not make decisions for the user; ask them for confirmation on unclear requirements.
 
 ## Core Code of Conduct
 
