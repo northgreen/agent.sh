@@ -1254,15 +1254,17 @@ run_agent() {
         # 恢复已有会话
         local session_id
         session_id=$(basename "$session_dir")
+        SESSION_DIR="$session_dir"  # 保持全局同步（防御性）
         echo "📂 Restored session: $session_id (iterations: $(jq '.iterations' "$session_dir/state.json" 2>/dev/null || echo 0))"
-        agent_loop "$session_dir"
+        agent_loop "$SESSION_DIR"
     else
         # 新建会话
         local session_id
         session_id=$(generate_session_id "$user_task")
         init_session "$session_id" "$user_task"
+        SESSION_DIR="sessions/${session_id}"  # 更新全局变量，后续轮次复用同一会话
         echo "🧠 Agent started. Type /exit to quit."
-        agent_loop "sessions/${session_id}"
+        agent_loop "$SESSION_DIR"
     fi
 }
 
